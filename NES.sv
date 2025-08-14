@@ -41,6 +41,8 @@ module emu
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
 	output        HDMI_FREEZE,
+	output        HDMI_BLACKOUT,
+	output        HDMI_BOB_DEINT,
 
 `ifdef MISTER_FB
 	// Use framebuffer in DDRAM
@@ -171,6 +173,8 @@ assign LED_POWER = 0;
 assign BUTTONS [1] = 0;
 assign VGA_SCALER  = 0;
 assign VGA_DISABLE = 0;
+assign HDMI_BLACKOUT = 0;
+assign HDMI_BOB_DEINT = 0;
 
 assign VGA_F1 = 0;
 //assign {UART_RTS, UART_TXD, UART_DTR} = 0;
@@ -212,7 +216,7 @@ end
 // 0         1         2         3          4         5         6
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXX XX     X XXXXXXXX XXXXX XXXXXXXXXXXXXXXXXXXXXX
+// XXXXXXXX XX     XXXXXXXXXXXXX XX XXXXXXXXXXXXXXXXXXXXXX
 
 `include "build_id.v"
 parameter CONF_STR = {
@@ -263,7 +267,11 @@ parameter CONF_STR = {
 	"P3,Miscellaneous;",
 	"P3-;",
 	"P3OG,Disk Swap,Auto,FDS button;",
+	"P3O[17],Disk Speed,Fast,Original;",
 	"P3o9,Pause when OSD is open,Off,On;",
+	"P4,Advanced;",
+	"P4-;",
+	"P4OQ,Video Dijitter,Enabled,Disabled;",
 	"- ;",
 	"R0,Reset;",
 	"J1,A,B,Select,Start,FDS,Mic,Zapper/Vaus Btn,PP/Mat 1,PP/Mat 2,PP/Mat 3,PP/Mat 4,PP/Mat 5,PP/Mat 6,PP/Mat 7,PP/Mat 8,PP/Mat 9,PP/Mat 10,PP/Mat 11,PP/Mat 12,Savestates;",
@@ -303,6 +311,7 @@ wire hide_overscan = status[4] && ~pal_video;
 wire [3:0] palette2_osd = status[49:47];
 wire joy_swap = status[9] ^ (raw_serial || piano); // Controller on port 2 for Miracle Piano/SNAC
 wire fds_auto_eject = ~status[16];
+wire fds_fast = ~status[17];
 wire ext_audio = ~status[30];
 wire int_audio = ~status[31];
 
@@ -858,6 +867,7 @@ NES nes (
 	.cycle           (cycle),
 	.scanline        (scanline),
 	.mask            (status[28:27]),
+	.dejitter_timing(status[26]),
 	// User Input
 	.joypad_out      (joypad_out),
 	.joypad_clock    (joypad_clock),
@@ -869,6 +879,7 @@ NES nes (
 	.fds_eject       (fds_btn),
 	.fds_auto_eject  (fds_auto_eject),
 	.max_diskside    (max_diskside),
+	.fds_fast        (fds_fast),
 
 	// Memory transactions
 	.cpumem_addr     (cpu_addr ),
@@ -1462,7 +1473,8 @@ wire [3:0] prg_nvram = (is_nes20 ? ines[10][7:4] : 4'h0);
 wire       piano = is_nes20 && (ines[15][5:0] == 6'h19);
 wire has_saves = ines[6][1];
 
-assign mapper_flags[63:35] = 'd0;
+assign mapper_flags[63:36] = 'd0;
+assign mapper_flags[35]    = is_nes20;
 assign mapper_flags[34:31] = prg_nvram; //NES 2.0 Save RAM shift size (64 << size)
 assign mapper_flags[30]    = piano;
 assign mapper_flags[29:26] = prgram; //NES 2.0 PRG RAM shift size (64 << size)
