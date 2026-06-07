@@ -5,159 +5,7 @@
 
 module emu
 (
-	//Master input clock
-	input         CLK_50M,
-
-	//Async reset from top-level module.
-	//Can be used as initial reset.
-	input         RESET,
-
-	//Must be passed to hps_io module
-	inout  [48:0] HPS_BUS,
-
-	//Base video clock. Usually equals to CLK_SYS.
-	output        CLK_VIDEO,
-
-	//Multiple resolutions are supported using different CE_PIXEL rates.
-	//Must be based on CLK_VIDEO
-	output        CE_PIXEL,
-
-	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
-	//if VIDEO_ARX[12] or VIDEO_ARY[12] is set then [11:0] contains scaled size instead of aspect ratio.
-	output [12:0] VIDEO_ARX,
-	output [12:0] VIDEO_ARY,
-
-	output  [7:0] VGA_R,
-	output  [7:0] VGA_G,
-	output  [7:0] VGA_B,
-	output        VGA_HS,
-	output        VGA_VS,
-	output        VGA_DE,    // = ~(VBlank | HBlank)
-	output        VGA_F1,
-	output [1:0]  VGA_SL,
-	output        VGA_SCALER, // Force VGA scaler
-	output        VGA_DISABLE, // analog out is off
-
-	input  [11:0] HDMI_WIDTH,
-	input  [11:0] HDMI_HEIGHT,
-	output        HDMI_FREEZE,
-	output        HDMI_BLACKOUT,
-	output        HDMI_BOB_DEINT,
-
-`ifdef MISTER_FB
-	// Use framebuffer in DDRAM
-	// FB_FORMAT:
-	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
-	//    [3]   : 0=16bits 565 1=16bits 1555
-	//    [4]   : 0=RGB  1=BGR (for 16/24/32 modes)
-	//
-	// FB_STRIDE either 0 (rounded to 256 bytes) or multiple of pixel size (in bytes)
-	output        FB_EN,
-	output  [4:0] FB_FORMAT,
-	output [11:0] FB_WIDTH,
-	output [11:0] FB_HEIGHT,
-	output [31:0] FB_BASE,
-	output [13:0] FB_STRIDE,
-	input         FB_VBL,
-	input         FB_LL,
-	output        FB_FORCE_BLANK,
-
-`ifdef MISTER_FB_PALETTE
-	// Palette control for 8bit modes.
-	// Ignored for other video modes.
-	output        FB_PAL_CLK,
-	output  [7:0] FB_PAL_ADDR,
-	output [23:0] FB_PAL_DOUT,
-	input  [23:0] FB_PAL_DIN,
-	output        FB_PAL_WR,
-`endif
-`endif
-
-	output        LED_USER,  // 1 - ON, 0 - OFF.
-
-	// b[1]: 0 - LED status is system status OR'd with b[0]
-	//       1 - LED status is controled solely by b[0]
-	// hint: supply 2'b00 to let the system control the LED.
-	output  [1:0] LED_POWER,
-	output  [1:0] LED_DISK,
-
-	// I/O board button press simulation (active high)
-	// b[1]: user button
-	// b[0]: osd button
-	output  [1:0] BUTTONS,
-
-	input         CLK_AUDIO, // 24.576 MHz
-	output [15:0] AUDIO_L,
-	output [15:0] AUDIO_R,
-	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
-	output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
-
-	//ADC
-	inout   [3:0] ADC_BUS,
-
-	//SD-SPI
-	output        SD_SCK,
-	output        SD_MOSI,
-	input         SD_MISO,
-	output        SD_CS,
-	input         SD_CD,
-
-	//High latency DDR3 RAM interface
-	//Use for non-critical time purposes
-	output        DDRAM_CLK,
-	input         DDRAM_BUSY,
-	output  [7:0] DDRAM_BURSTCNT,
-	output [28:0] DDRAM_ADDR,
-	input  [63:0] DDRAM_DOUT,
-	input         DDRAM_DOUT_READY,
-	output        DDRAM_RD,
-	output [63:0] DDRAM_DIN,
-	output  [7:0] DDRAM_BE,
-	output        DDRAM_WE,
-
-	//SDRAM interface with lower latency
-	output        SDRAM_CLK,
-	output        SDRAM_CKE,
-	output [12:0] SDRAM_A,
-	output  [1:0] SDRAM_BA,
-	inout  [15:0] SDRAM_DQ,
-	output        SDRAM_DQML,
-	output        SDRAM_DQMH,
-	output        SDRAM_nCS,
-	output        SDRAM_nCAS,
-	output        SDRAM_nRAS,
-	output        SDRAM_nWE,
-
-`ifdef MISTER_DUAL_SDRAM
-	//Secondary SDRAM
-	//Set all output SDRAM_* signals to Z ASAP if SDRAM2_EN is 0
-	input         SDRAM2_EN,
-	output        SDRAM2_CLK,
-	output [12:0] SDRAM2_A,
-	output  [1:0] SDRAM2_BA,
-	inout  [15:0] SDRAM2_DQ,
-	output        SDRAM2_nCS,
-	output        SDRAM2_nCAS,
-	output        SDRAM2_nRAS,
-	output        SDRAM2_nWE,
-`endif
-
-	input         UART_CTS,
-	output        UART_RTS,
-	input         UART_RXD,
-	output        UART_TXD,
-	output        UART_DTR,
-	input         UART_DSR,
-
-	// Open-drain User port.
-	// 0 - D+/RX
-	// 1 - D-/TX
-	// 2..6 - USR2..USR6
-	// Set USER_OUT to 1 to read from USER_IN.
-	input   [6:0] USER_IN,
-	output  [6:0] USER_OUT,
-
-	input         OSD_STATUS
+	`include "sys/emu_ports.vh"
 );
 
 assign ADC_BUS  = 'Z;
@@ -206,9 +54,9 @@ video_freak video_freak
 reg [1:0] video_status;
 reg new_vmode = 0;
 always @(posedge clk) begin
-    if (video_status != status[24:23]) begin
-        video_status <= status[24:23];
-        new_vmode <= ~new_vmode;
+	if (video_status != effective_sys_type) begin
+		video_status <= effective_sys_type;
+		new_vmode <= ~new_vmode;
     end
 end
 
@@ -224,7 +72,7 @@ parameter CONF_STR = {
 	"FS,NESFDSNSF;",
 	"H1F2,BIN,Load FDS BIOS;",
 	"-;",
-	"ONO,System Type,NTSC,PAL,Dendy;",
+	"ONO,System Type,Auto,NTSC,PAL,Dendy;",
 	"-;",
 	"C,Cheats;",
 	"H2OK,Cheats Enabled,On,Off;",
@@ -296,7 +144,8 @@ parameter CONF_STR = {
 	"Save to state 3,",
 	"Restore state 3,",
 	"Save to state 4,",
-	"Restore state 4;",
+	"Restore state 4,",
+	"No NES 2.0 header found\nDefaulting to NTSC;",
 	"V,v",`BUILD_DATE
 };
 
@@ -308,7 +157,6 @@ wire [1:0] buttons;
 wire [127:0] status;
 
 wire arm_reset = status[0];
-wire pal_video = |status[24:23];
 wire [1:0] hide_overscan = status[68:67];
 wire [3:0] palette2_osd = status[49:47];
 wire joy_swap = status[9] ^ (raw_serial || piano); // Controller on port 2 for Miracle Piano/SNAC
@@ -316,6 +164,14 @@ wire fds_auto_eject = ~status[16];
 wire fds_fast = ~status[17];
 wire ext_audio = ~status[30];
 wire int_audio = ~status[31];
+
+// Auto detect console region
+wire [1:0] auto_sys_type = (mapper_flags[37:36] == 2'd1) ? 2'd1 :  // PAL
+                           (mapper_flags[37:36] == 2'd3) ? 2'd2 :  // Dendy
+                           2'd0;                                    // NTSC (0 and multi-region)
+wire [1:0] effective_sys_type = (status[24:23] == 2'd0) ? auto_sys_type
+                                                         : (status[24:23] - 2'd1);
+wire pal_video = |effective_sys_type;
 
 // Figure out file types
 reg type_bios, type_fds, type_gg, type_nsf, type_nes, type_palette, is_bios, downloading;
@@ -464,8 +320,8 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 assign joyA = joyA_unmod[23] ? 23'b0 : joyA_unmod;
 
-wire       info_req = diskside_info || ss_info_req;
-wire [7:0] info     = ss_info_req ? ss_info : {1'b0,diskside} + 3'd1;
+wire       info_req = diskside_info || ss_info_req || auto_info_req;
+wire [7:0] info     = ss_info_req ? ss_info : auto_info_req ? 8'd18 : {1'b0,diskside} + 3'd1;
 
 wire clock_locked;
 wire clk85;
@@ -508,7 +364,7 @@ always @(posedge CLK_50M) begin : cfg_block
 	reg pald = 0, pald2 = 0;
 	reg [2:0] state = 0;
 
-	pald  <= status[23];
+	pald  <= (effective_sys_type == 2'd1);
 	pald2 <= pald;
 
 	cfg_write <= 0;
@@ -788,7 +644,14 @@ GameLoader loader
 	.rom_loaded       ( rom_loaded        )
 );
 
-always @(posedge clk) if (loader_done) mapper_flags <= loader_flags;
+reg auto_info_req;
+
+always @(posedge clk) begin
+	if (loader_done) mapper_flags <= loader_flags;
+	auto_info_req <= 0;
+	if (loader_done && rom_loaded && type_nes && !loader_flags[35] && status[24:23] == 2'd0)
+		auto_info_req <= 1;
+end
 
 reg led_blink;
 always @(posedge clk) begin : blink_block
@@ -809,10 +672,10 @@ wire reset_nes =
 	bk_loading     ||
 	bk_loading_req ||
 	hold_reset     ||
-	(old_sys_type != status[24:23]);
+	(old_sys_type != effective_sys_type);
 
 reg [1:0] old_sys_type;
-always @(posedge clk) old_sys_type <= status[24:23];
+always @(posedge clk) old_sys_type <= effective_sys_type;
 
 wire [17:0] bram_addr;
 wire [7:0] bram_din;
@@ -862,7 +725,7 @@ NES nes (
 	.pausecore       (pausecore),
 	.corepaused      (corepaused),
 	.debug_dots	     (status[69]),
-	.sys_type        (status[24:23]),
+	.sys_type        (effective_sys_type),
 	.nes_div         (nes_ce),
 	.mapper_flags    (downloading ? 64'd0 : mapper_flags),
 	.gg              (status[20]),
@@ -1174,7 +1037,7 @@ video video
 	.clk(clk),
 	.reset(reset_nes),
 	.cnt(nes_ce_video),
-	.sys_type(status[24:23]),
+	.sys_type(effective_sys_type),
 	.nes_hsync(nes_hsync),
 	.nes_hblank(nes_hblank),
 	.nes_vsync(nes_vsync),
@@ -1505,7 +1368,8 @@ wire [3:0] prg_nvram = (is_nes20 ? ines[10][7:4] : 4'h0);
 wire       piano = is_nes20 && (ines[15][5:0] == 6'h19);
 wire has_saves = ines[6][1];
 
-assign mapper_flags[63:36] = 'd0;
+assign mapper_flags[63:38] = 'd0;
+assign mapper_flags[37:36] = is_nes20 ? ines[12][1:0] : 2'b00;
 assign mapper_flags[35]    = is_nes20;
 assign mapper_flags[34:31] = prg_nvram; //NES 2.0 Save RAM shift size (64 << size)
 assign mapper_flags[30]    = piano;

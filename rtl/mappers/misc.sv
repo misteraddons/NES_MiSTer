@@ -1449,7 +1449,6 @@ assign vram_ce = chr_ain[13];
 
 endmodule
 
-
 module Mapper234(
 	input        clk,         // System clock
 	input        ce,          // M2 ~cpu_clk
@@ -1981,7 +1980,7 @@ always @(posedge clk) begin
 						'h5300: security[3] <= prg_din;
 					endcase
 				end
-			end else if (prg_read) begin // Security stuff as Mesen does it
+			end else if (prg_read) begin
 				prg_bus_write <= 1'b1;
 				case (prg_ain & 16'h7700)
 					'h5100: prg_dout <= security[0] | security[1] | security[3] | (security[2] ^ 8'hFF);
@@ -2179,6 +2178,98 @@ eReg_SavestateV #(SSREG_INDEX_MAP2, 64'h0000000000000000) iREG_SAVESTATE_MAP2 (c
 eReg_SavestateV #(SSREG_INDEX_MAP3, 64'h0000000000000000) iREG_SAVESTATE_MAP3 (clk, SaveStateBus_Din, SaveStateBus_Adr, SaveStateBus_wren, SaveStateBus_rst, SaveStateBus_wired_or[2], SS_MAP3_BACK, SS_MAP3);  
 
 assign SaveStateBus_Dout = enable ? SaveStateBus_Dout_active : 64'h0000000000000000;
+
+endmodule
+
+// #200 - 36-in-1 multicart (address latch based)
+// #212 - BMC Super HiK 100-in-1 / pirate multicart (address latch based)
+module Mapper200(
+	input        clk,         // System clock
+	input        ce,          // M2 ~cpu_clk
+	input        enable,      // Mapper enabled
+	input [31:0] flags,       // Cart flags
+	input [15:0] prg_ain,     // prg address
+	inout [21:0] prg_aout_b,  // prg address out
+	input        prg_read,    // prg read
+	input        prg_write,   // prg write
+	input  [7:0] prg_din,     // prg data in
+	inout  [7:0] prg_dout_b,  // prg data out
+	inout        prg_allow_b, // Enable access to memory for the specified operation.
+	input [13:0] chr_ain,     // chr address in
+	inout [21:0] chr_aout_b,  // chr address out
+	input        chr_read,    // chr ram read
+	inout        chr_allow_b, // chr allow write
+	inout        vram_a10_b,  // Value for A10 address line
+	inout        vram_ce_b,   // True if the address should be routed to the internal 2kB VRAM.
+	inout        irq_b,       // IRQ
+	input [15:0] audio_in,    // Inverted audio from APU
+	inout [15:0] audio_b,     // Mixed audio output
+	inout [15:0] flags_out_b  // flags {0, 0, 0, 0, has_savestate, prg_conflict, prg_bus_write, has_chr_dout}
+);
+
+assign prg_aout_b   = enable ? prg_aout : 22'hZ;
+assign prg_dout_b   = enable ? 8'hFF : 8'hZ;
+assign prg_allow_b  = enable ? prg_allow : 1'hZ;
+assign chr_aout_b   = enable ? chr_aout : 22'hZ;
+assign chr_allow_b  = enable ? chr_allow : 1'hZ;
+assign vram_a10_b   = enable ? vram_a10 : 1'hZ;
+assign vram_ce_b    = enable ? vram_ce : 1'hZ;
+assign irq_b        = enable ? 1'b0 : 1'hZ;
+assign flags_out_b  = enable ? flags_out : 16'hZ;
+assign audio_b      = enable ? {1'b0, audio_in[15:1]} : 16'hZ;
+
+wire [21:0] prg_aout, chr_aout;
+wire prg_allow;
+wire chr_allow;
+wire vram_a10;
+wire vram_ce;
+wire [15:0] flags_out = 0;
+
+wire mapper212 = (flags[7:0] == 212);
+
+// Address latch - directly from the bus address during writes to $8000-$FFFF
+// A~[1... .... .... bBBB]
+// BBB = PRG A16..A14 and CHR A15..A13 (bits 2:0)
+// b = PRG A17, CHR A16, and mirroring (bit 3): 0=vertical, 1=horizontal
+reg [4:0] bank;
+
+always @(posedge clk) begin
+	if (~enable) begin
+		bank <= 5'b0;
+	end else if (ce && prg_write && prg_ain[15]) begin
+		bank <= {prg_ain[14], prg_ain[3:0]};
+	end
+end
+
+reg [3:0] prg_bank;
+always @* begin
+	if (mapper212) begin
+		if (bank[4]) begin
+			// bit 14 = 1: 32KB mode, BB selects a 32KB bank, prg_ain[14] picks the half
+			prg_bank = {bank[2:1], prg_ain[14]};
+		end else begin
+			// bit 14 = 0: 16KB mode, BBb mirrored across $8000-$FFFF
+			prg_bank = {1'b0, bank[2:0]};
+		end
+	end else begin
+		// Mapper 200: 4-bit bank, NROM-128 mirror
+		prg_bank = bank[3:0];
+	end
+end
+
+assign prg_aout  = {4'b00_00, prg_bank, prg_ain[13:0]};
+assign prg_allow = prg_ain[15] && !prg_write;
+
+// CHR: 8KB bank
+//   Mapper 200: 4-bit bank (up to 128KB)
+//   Mapper 212: 3-bit bank (up to 64KB)
+wire [3:0] chr_bank = mapper212 ? {1'b0, bank[2:0]} : bank[3:0];
+assign chr_aout  = {5'b10_000, chr_bank, chr_ain[12:0]};
+assign chr_allow = flags[15];
+
+// Mirroring: bit 3 controls H/V
+assign vram_ce = chr_ain[13];
+assign vram_a10 = bank[3] ? chr_ain[11] : chr_ain[10]; // 1=horizontal, 0=vertical
 
 endmodule
 
